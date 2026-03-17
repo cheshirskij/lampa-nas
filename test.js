@@ -1,86 +1,45 @@
 (function () {
     'use strict';
 
-    // 1. Добавляем название для кнопки
-    Lampa.Lang.add({
-        my_nas_title: { ru: "Настроить Jellyfin NAS", en: "Setup Jellyfin NAS" }
-    });
+    // Твои жестко прописанные данные
+    var nas_host = 'http://192.168.1.95:8096';
+    var nas_key  = 'B4659bb0cc0c476bb7bf3113fef553f9';
 
-    // 2. Функция вставки кнопки в настройки (твой рабочий метод)
-    function addNasButton() {
-        var menu = Lampa.Settings.main && Lampa.Settings.main().render();
-        if (menu && !menu.find('[data-component="my_nas_settings"]').length) {
-            var field = $('<div class="settings-folder selector" data-component="my_nas_settings">' +
-                '<div class="settings-folder__icon">' +
-                    '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M19 13H5V11H19V13ZM19 17H4V15H19V17ZM19 21H5V19H19V21ZM5 5V7H19V5H5Z" fill="white"/></svg>' +
-                '</div>' +
-                '<div class="settings-folder__name">' + Lampa.Lang.translate('my_nas_title') + '</div>' +
-            '</div>');
-
-            // Вставляем после раздела "Остальное"
-            menu.find('[data-component="more"]').after(field);
-            
-            // Вешаем действие ПРЯМО на эту кнопку
-            field.on('hover:enter', function () {
-                // Сначала спрашиваем IP
-                Lampa.Input.edit({
-                    value: Lampa.Storage.get('nas_host', ''),
-                    title: 'Введите адрес Jellyfin',
-                    placeholder: 'http://192.168.1.100:8096',
-                    free: true
-                }, function (new_host) {
-                    if (new_host) {
-                        Lampa.Storage.set('nas_host', new_host);
-                        Lampa.Noty.show('IP сохранен');
-                        
-                        // Сразу после IP спрашиваем API Ключ
-                        setTimeout(function(){
-                            Lampa.Input.edit({
-                                value: Lampa.Storage.get('nas_key', ''),
-                                title: 'Введите API Ключ',
-                                placeholder: 'Твой длинный ключ...',
-                                free: true
-                            }, function (new_key) {
-                                if (new_key) {
-                                    Lampa.Storage.set('nas_key', new_key);
-                                    Lampa.Noty.show('Настройки применены!');
-                                }
-                            });
-                        }, 200);
-                    }
-                });
-            });
-
-            Lampa.Settings.main().update();
-        }
-    }
-
-    // 3. Следим за открытием меню настроек
-    Lampa.Settings.listener.follow('open', function (e) {
-        if (e.name == 'main') {
-            addNasButton();
-        }
-    });
-
-    // 4. Основной плагин (плитка в расширениях)
     function StartPlugin() {
         Lampa.Plugins.add({
             name: 'Jellyfin NAS',
-            description: 'Поиск фильмов на твоем Proxmox',
+            description: 'Твой сервер в Proxmox',
             auth: false,
+            // Иконка сервера
+            icon: '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 13H4V11H20V13ZM20 17H4V15H20V17ZM20 21H4V19H20V21ZM10 3L12 5L14 3H20C21.1 3 22 3.9 22 5V21C22 22.1 21.1 23 20 23H4C2.9 23 2 22.1 2 21V5C2 3.9 2.9 3 4 3H10Z" fill="white"/></svg>',
             onLaunch: function () {
-                var host = Lampa.Storage.get('nas_host');
-                var key = Lampa.Storage.get('nas_key');
-                if (!host || !key) {
-                    Lampa.Noty.show('Сначала нажми кнопку настройки в меню!');
-                } else {
-                    Lampa.Noty.show('Сервер: ' + host);
-                }
+                Lampa.Noty.show('Стучусь на ' + nas_host);
+                
+                // Параметры запроса: берем только фильмы, сортируем по дате добавления
+                var url = nas_host + '/Items?api_key=' + nas_key + '&IncludeItemTypes=Movie&Limit=50&Recursive=true&Fields=PrimaryImageAspectRatio,CanDelete&SortBy=DateCreated&SortOrder=Descending';
+
+                $.ajax({
+                    url: url,
+                    method: 'GET',
+                    timeout: 5000,
+                    success: function (data) {
+                        if (data && data.Items && data.Items.length > 0) {
+                            Lampa.Noty.show('Нашел фильмов: ' + data.Items.length);
+                            console.log('Jellyfin Data:', data.Items);
+                            
+                            // Мы получили данные! Теперь мы готовы выводить их на экран Лампы.
+                        } else {
+                            Lampa.Noty.show('Связь есть, но в библиотеках Jellyfin пусто.');
+                        }
+                    },
+                    error: function (jqXHR, textStatus) {
+                        Lampa.Noty.show('Не удалось достучаться до 192.168.1.95. Проверь сеть!');
+                    }
+                });
             }
         });
-        addNasButton();
     }
 
+    // Безопасный запуск плагина
     if (window.appready) StartPlugin();
-    else Lampa.Listener.follow('app', function (e) { if (e.type == 'ready') StartPlugin(); });
-})();
+    else Lampa.Listener.follow('app', function (e)
