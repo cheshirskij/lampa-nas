@@ -3,81 +3,83 @@
 
     // 1. Локализация
     Lampa.Lang.add({
-        my_nas_title: { ru: "Мой Jellyfin NAS", en: "My Jellyfin NAS" },
-        nas_server_ip: { ru: 'IP сервера Jellyfin', en: 'Jellyfin Server IP' },
-        nas_api_key: { ru: 'API Ключ', en: 'API Key' }
+        my_nas_title: { ru: "Настройка Jellyfin NAS", en: "Jellyfin NAS Setup" }
     });
 
-    // 2. Создаем страницу настроек
-    Lampa.Component.add('nas_settings_page', function (object) {
-        var comp = new Lampa.InteractionMain(object);
-        comp.create = function () {
-            this.activity.loader(true);
-            this.build([]);
-        };
-        comp.build = function () {
-            var _this = this;
-            this.activity.loader(false);
+    // 2. Функция вставки кнопки (твой проверенный способ)
+    function addNasButton() {
+        if (Lampa.Settings.main && !Lampa.Settings.main().render().find('[data-component="my_nas_settings"]').length) {
+            var field = $('<div class="settings-folder selector" data-component="my_nas_settings">' +
+                '<div class="settings-folder__icon">' +
+                    '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M19 13H5V11H19V13ZM19 17H4V15H19V17ZM19 21H5V19H19V21ZM5 5V7H19V5H5Z" fill="white"/></svg>' +
+                '</div>' +
+                '<div class="settings-folder__name">' + Lampa.Lang.translate('my_nas_title') + '</div>' +
+            '</div>');
+
+            // Вставляем после раздела "Остальное"
+            Lampa.Settings.main().render().find('[data-component="more"]').after(field);
             
-            var items = [
-                { title: Lampa.Lang.translate('nas_server_ip'), name: 'nas_host', placeholder: 'http://192.168.1.100:8096' },
-                { title: Lampa.Lang.translate('nas_api_key'), name: 'nas_key', placeholder: 'Твой API Ключ' }
-            ];
-
-            items.forEach(function (item) {
-                var field = Lampa.Template.get('settings_field', { 
-                    title: item.title, 
-                    description: Lampa.Storage.get(item.name) || item.placeholder 
+            // Вешаем событие клика СРАЗУ на эту кнопку
+            field.on('hover:enter', function () {
+                // Вместо открытия новой страницы (которая давала ошибку), просто вызываем ввод IP
+                Lampa.Input.edit({
+                    value: Lampa.Storage.get('nas_host', ''),
+                    title: 'Введите IP вашего Jellyfin',
+                    placeholder: 'http://192.168.1.100:8096',
+                    free: true
+                }, function (new_value) {
+                    if (new_value) {
+                        Lampa.Storage.set('nas_host', new_value);
+                        Lampa.Noty.show('IP сохранен: ' + new_value);
+                        
+                        // После IP сразу спросим API ключ для удобства
+                        setTimeout(function(){
+                            Lampa.Input.edit({
+                                value: Lampa.Storage.get('nas_key', ''),
+                                title: 'Введите API Ключ',
+                                placeholder: 'B4659bb...',
+                                free: true
+                            }, function (key_value) {
+                                if (key_value) {
+                                    Lampa.Storage.set('nas_key', key_value);
+                                    Lampa.Noty.show('Ключ сохранен!');
+                                }
+                            });
+                        }, 500);
+                    }
                 });
-                
-                field.on('hover:enter', function () {
-                    Lampa.Input.edit({ 
-                        value: Lampa.Storage.get(item.name, ''), 
-                        free: true 
-                    }, function (new_value) {
-                        if (new_value) {
-                            Lampa.Storage.set(item.name, new_value);
-                            Lampa.Noty.show('Сохранено: ' + new_value);
-                            _this.activity.back(); // Возвращаемся после ввода
-                        }
-                    });
-                });
-                _this.append(field);
             });
-        };
-        return comp;
+
+            Lampa.Settings.main().update();
+        }
+    }
+
+    // 3. Следим за открытием настроек
+    Lampa.Settings.listener.follow('open', function (e) {
+        if (e.name == 'main') {
+            addNasButton();
+        }
     });
 
-    // 3. Главная функция запуска
+    // 4. Плитка в расширениях для запуска
     function StartPlugin() {
-        // Добавляем пункт в настройки ОФИЦИАЛЬНЫМ способом, чтобы не было ошибки шаблона
-        Lampa.Settings.add({
-            title: Lampa.Lang.translate('my_nas_title'),
-            type: 'open',
-            name: 'my_nas_settings', // ID должен совпадать с именованием в системе
-            icon: '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M19 15V13H5V15H19ZM19 19V17H5V19H19ZM19 11V9H5V11H19ZM5 5V7H19V5H5Z" fill="white"/></svg>',
-            component: 'nas_settings_page'
-        });
-
-        // Добавляем плитку в расширения
         Lampa.Plugins.add({
             name: 'Jellyfin NAS',
-            description: 'Поиск фильмов на твоем Proxmox',
+            description: 'Запуск поиска фильмов',
             auth: false,
             onLaunch: function () {
                 var host = Lampa.Storage.get('nas_host');
-                if (!host) {
-                    Lampa.Noty.show('Настрой IP в настройках!');
+                var key = Lampa.Storage.get('nas_key');
+                if (!host || !key) {
+                    Lampa.Noty.show('Сначала нажми кнопку настройки ниже!');
                 } else {
-                    Lampa.Noty.show('Подключаюсь к ' + host);
+                    Lampa.Noty.show('Подключаюсь к: ' + host);
                 }
             }
         });
+        addNasButton();
     }
 
-    // Запуск
     if (window.appready) StartPlugin();
-    else Lampa.Listener.follow('app', function (e) { 
-        if (e.type == 'ready') StartPlugin(); 
-    });
+    else Lampa.Listener.follow('app', function (e) { if (e.type == 'ready') StartPlugin(); });
 })();
