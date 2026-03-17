@@ -1,34 +1,36 @@
 (function () {
     'use strict';
 
-    try {
-        var NasPlugin = function() {
-            this.name = 'jellyfin_test';
-            
-            this.init = function() {
-                // Выводим уведомление сразу
-                Lampa.Noty.show('ПРИВЕТ! Я РАБОТАЮ!');
-                
-                // Добавляем кнопку в меню через 2 секунды после старта
-                setTimeout(function() {
-                    var menu = $('.menu__list');
-                    if (menu.length) {
-                        var item = $('<li class="menuitem selector" data-action="jelly_test"><div class="menuico"><svg width="36" height="36" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" fill="red"/></svg></div><div class="menu__text">NAS ТЕСТ</div></li>');
-                        menu.append(item);
-                        Lampa.Noty.show('Кнопка в меню!');
-                    }
-                }, 2000);
-            };
+    // 1. Создаем саму страницу, которая откроется при клике
+    Lampa.Component.add('jelly_nas_page', function (object) {
+        var comp = new Lampa.InteractionMain(object);
+
+        comp.create = function () {
+            this.activity.loader(true); // Рисуем крутилку загрузки
+            this.build([]);
         };
 
-        // Регистрация в глобальном объекте Lampa
-        if (window.appready) new NasPlugin().init();
-        else {
-            Lampa.Listener.follow('app', function (e) {
-                if (e.type == 'ready') new NasPlugin().init();
+        comp.build = function (items) {
+            var _this = this;
+            this.activity.loader(false); // Убираем загрузку
+
+            // Покажем красивую заглушку
+            var empty = Lampa.Template.get('empty', {
+                title: 'Jellyfin NAS',
+                descr: 'Связь через GitHub Pages работает! Скоро здесь будет твой Proxmox.'
             });
-        }
-    } catch (e) {
-        console.error('NAS Plugin Error:', e);
-    }
-})();
+
+            this.display(empty);
+        };
+
+        return comp;
+    });
+
+    // 2. Регистрируем плагин в системе
+    function StartPlugin() {
+        Lampa.Plugins.add({
+            name: 'Jellyfin NAS',
+            description: 'Локальный сервер через GitHub Pages',
+            auth: false,
+            // Иконка в виде сервера
+            icon: '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 13H4V11H20V13ZM20 17H4V15H20V17ZM20 21H4V19H20V21ZM10 3L12 5L14 3H20C21.1 3 22 3.9 22 5V21C22 22.1 21.1 23 20 23H4C2
