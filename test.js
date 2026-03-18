@@ -4,11 +4,11 @@
     var nas_host = 'http://178.234.15.238:8096';
     var nas_key  = 'b4659bb0cc0c476bb7bf3113fef553f9';
 
+    // Оставляем ваш исходный рабочий запрос списка
     function getAllContent(callback) {
         var network = new Lampa.Reguest();
-        // Добавляем запрос полей MediaSources для данных о субтитрах
         var url = nas_host + '/Items?api_key=' + nas_key + 
-                  '&Recursive=true&IncludeItemTypes=Movie,Episode,Video&Limit=50&SortBy=DateCreated&SortOrder=Descending&Fields=MediaSources';
+                  '&Recursive=true&IncludeItemTypes=Movie,Episode,Video&Limit=50&SortBy=DateCreated&SortOrder=Descending';
 
         network.silent(url, function (data) {
             callback(data.Items || []);
@@ -39,34 +39,40 @@
                                 }),
                                 onSelect: function (selected) {
                                     var item = selected.data;
-                                    var vUrl = nas_host + '/Videos/' + item.Id + '/stream.mp4?api_key=' + nas_key + '&static=true';
                                     
-                                    var subs = [];
+                                    // Запрашиваем подробности о конкретном файле (субтитры) перед игрой
+                                    var net = new Lampa.Reguest();
+                                    var detailUrl = nas_host + '/Items/' + item.Id + '?api_key=' + nas_key;
                                     
-                                    // Проверяем наличие MediaSources и потоков
-                                    if (item.MediaSources && item.MediaSources.length > 0) {
-                                        var sourceId = item.MediaSources[0].Id;
-                                        var streams = item.MediaSources[0].MediaStreams || [];
-                                        
-                                        streams.forEach(function(stream) {
-                                            if (stream.Type === 'Subtitle') {
-                                                // Формируем прямую ссылку на VTT поток субтитра
-                                                subs.push({
-                                                    label: stream.DisplayTitle || stream.Language || 'Sub',
-                                                    url: nas_host + '/Videos/' + item.Id + '/' + sourceId + '/Subtitles/' + stream.Index + '/0/Stream.vtt?api_key=' + nas_key
-                                                });
-                                            }
-                                        });
-                                    }
+                                    net.silent(detailUrl, function(fullItem) {
+                                        var subs = [];
+                                        if (fullItem.MediaSources && fullItem.MediaSources[0]) {
+                                            var source = fullItem.MediaSources[0];
+                                            (source.MediaStreams || []).forEach(function(stream) {
+                                                if (stream.Type === 'Subtitle') {
+                                                    subs.push({
+                                                        label: stream.DisplayTitle || stream.Language || 'Sub',
+                                                        url: nas_host + '/Videos/' + item.Id + '/' + source.Id + '/Subtitles/' + stream.Index + '/0/Stream.vtt?api_key=' + nas_key
+                                                    });
+                                                }
+                                            });
+                                        }
 
-                                    var videoData = {
-                                        url: vUrl,
-                                        title: item.Name,
-                                        subtitles: subs
-                                    };
-                                    
-                                    Lampa.Player.play(videoData);
-                                    Lampa.Player.playlist([videoData]);
+                                        var vUrl = nas_host + '/Videos/' + item.Id + '/stream.mp4?api_key=' + nas_key + '&static=true';
+                                        var videoData = {
+                                            url: vUrl,
+                                            title: item.Name,
+                                            subtitles: subs
+                                        };
+
+                                        Lampa.Player.play(videoData);
+                                        Lampa.Player.playlist([videoData]);
+                                        
+                                    }, function() {
+                                        // Если детальный запрос не удался, просто играем без субтитров
+                                        var vUrl = nas_host + '/Videos/' + item.Id + '/stream.mp4?api_key=' + nas_key + '&static=true';
+                                        Lampa.Player.play({ url: vUrl, title: item.Name });
+                                    });
                                 },
                                 onBack: function () {
                                     Lampa.Controller.toggle('full_start');
