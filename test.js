@@ -6,7 +6,7 @@
 
     function getAllContent(callback) {
         var network = new Lampa.Reguest();
-        // Добавили Fields=MediaSources, чтобы Jellyfin сразу отдавал данные о потоках (субтитрах)
+        // Добавляем запрос полей MediaSources для данных о субтитрах
         var url = nas_host + '/Items?api_key=' + nas_key + 
                   '&Recursive=true&IncludeItemTypes=Movie,Episode,Video&Limit=50&SortBy=DateCreated&SortOrder=Descending&Fields=MediaSources';
 
@@ -40,8 +40,51 @@
                                 onSelect: function (selected) {
                                     var item = selected.data;
                                     var vUrl = nas_host + '/Videos/' + item.Id + '/stream.mp4?api_key=' + nas_key + '&static=true';
+                                    
                                     var subs = [];
+                                    
+                                    // Проверяем наличие MediaSources и потоков
+                                    if (item.MediaSources && item.MediaSources.length > 0) {
+                                        var sourceId = item.MediaSources[0].Id;
+                                        var streams = item.MediaSources[0].MediaStreams || [];
+                                        
+                                        streams.forEach(function(stream) {
+                                            if (stream.Type === 'Subtitle') {
+                                                // Формируем прямую ссылку на VTT поток субтитра
+                                                subs.push({
+                                                    label: stream.DisplayTitle || stream.Language || 'Sub',
+                                                    url: nas_host + '/Videos/' + item.Id + '/' + sourceId + '/Subtitles/' + stream.Index + '/0/Stream.vtt?api_key=' + nas_key
+                                                });
+                                            }
+                                        });
+                                    }
 
-                                    // Поиск субтитров в метаданных Jellyfin
-                                    if (item.MediaSources && item.MediaSources[0]) {
-                                        var source = item.MediaSources[0];
+                                    var videoData = {
+                                        url: vUrl,
+                                        title: item.Name,
+                                        subtitles: subs
+                                    };
+                                    
+                                    Lampa.Player.play(videoData);
+                                    Lampa.Player.playlist([videoData]);
+                                },
+                                onBack: function () {
+                                    Lampa.Controller.toggle('full_start');
+                                }
+                            });
+                        } else {
+                            Lampa.Noty.show('Файлы не найдены');
+                        }
+                    });
+                });
+
+                var container = e.object.activity.render().find('.view--torrent');
+                if (container.length) container.after(btn);
+                else e.object.activity.render().find('.full-start__buttons').append(btn);
+            }
+        });
+    }
+
+    if (window.appready) startPlugin();
+    else Lampa.Listener.follow('app', function (e) { if (e.type == 'ready') startPlugin(); });
+})();
