@@ -4,15 +4,6 @@
     var nas_host = 'http://178.234.15.238:8096';
     var nas_key  = 'b4659bb0cc0c476bb7bf3113fef553f9';
 
-    // Функция конвертации из кода выше для стабильности
-    function srtToVtt(s) {
-        var t = String(s || '').replace(/\r+/g, '').trim();
-        return 'WEBVTT\n\n' + t
-            .replace(/^\d+\n/gm, '')
-            .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})\s-->\s(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2 --> $3.$4')
-            .replace(/\n{3,}/g, '\n\n');
-    }
-
     function getAllContent(callback) {
         var network = new Lampa.Reguest();
         var url = nas_host + '/Items?api_key=' + nas_key + 
@@ -39,44 +30,43 @@
                             Lampa.Select.show({
                                 title: 'Файлы на сервере',
                                 items: items.map(function(i){
-                                    return { title: i.Name, subtitle: i.ProductionYear || '', data: i }
+                                    return {
+                                        title: i.Name,
+                                        subtitle: i.ProductionYear || '',
+                                        data: i
+                                    }
                                 }),
                                 onSelect: function (selected) {
                                     var item = selected.data;
                                     var vUrl = nas_host + '/Videos/' + item.Id + '/stream.mp4?api_key=' + nas_key + '&static=true';
                                     
-                                    // 1. Сначала запускаем видео, чтобы не было "крутилки"
-                                    var videoData = { url: vUrl, title: item.Name, subtitles: [] };
+                                    // Формируем массив субтитров "вслепую" для первой дорожки
+                                    // Jellyfin обычно отдает поток 0 как видео, 1 как аудио, а дальше субтитры
+                                    var subs = [
+                                        {
+                                            label: 'Внешние/Вшитые',
+                                            url: nas_host + '/Videos/' + item.Id + '/Subtitles/2/0/Stream.vtt?api_key=' + nas_key,
+                                            type: 'vtt'
+                                        },
+                                        {
+                                            label: 'Дорожка 2',
+                                            url: nas_host + '/Videos/' + item.Id + '/Subtitles/3/0/Stream.vtt?api_key=' + nas_key,
+                                            type: 'vtt'
+                                        }
+                                    ];
+
+                                    var videoData = {
+                                        url: vUrl,
+                                        title: item.Name,
+                                        subtitles: subs // Просто передаем их списком
+                                    };
+                                    
                                     Lampa.Player.play(videoData);
                                     Lampa.Player.playlist([videoData]);
-
-                                    // 2. В фоне запрашиваем субтитры
-                                    var net = new Lampa.Reguest();
-                                    net.silent(nas_host + '/Items/' + item.Id + '?api_key=' + nas_key, function(res) {
-                                        if (res.MediaSources && res.MediaSources[0]) {
-                                            var streams = res.MediaSources[0].MediaStreams || [];
-                                            streams.forEach(function(s) {
-                                                if (s.Type === 'Subtitle') {
-                                                    var sUrl = nas_host + '/Videos/' + item.Id + '/' + res.MediaSources[0].Id + '/Subtitles/' + s.Index + '/0/Stream.srt?api_key=' + nas_key;
-                                                    
-                                                    // Загружаем текст субтитров, конвертируем в VTT и подсовываем плееру
-                                                    fetch(sUrl).then(function(r){ return r.text() }).then(function(text){
-                                                        var vtt = srtToVtt(text);
-                                                        var blob = new Blob([vtt], { type: 'text/vtt' });
-                                                        var blobUrl = URL.createObjectURL(blob);
-                                                        
-                                                        // Добавляем субтитр в работающий плеер
-                                                        Lampa.Player.subs([{
-                                                            label: s.DisplayTitle || s.Language || 'Субтитры',
-                                                            url: blobUrl
-                                                        }]);
-                                                    }).catch(function(){});
-                                                }
-                                            });
-                                        }
-                                    });
                                 },
-                                onBack: function () { Lampa.Controller.toggle('full_start'); }
+                                onBack: function () {
+                                    Lampa.Controller.toggle('full_start');
+                                }
                             });
                         } else {
                             Lampa.Noty.show('Файлы не найдены');
