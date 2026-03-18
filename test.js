@@ -1,7 +1,7 @@
 (function () {
     'use strict';
 
-    var nas_host = 'http://192.168.1.95:8096';
+    var nas_host = 'http://178.234.15.238:8096';
     var nas_key  = 'b4659bb0cc0c476bb7bf3113fef553f9';
 
     function searchInJellyfin(movie, callback) {
