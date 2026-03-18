@@ -4,29 +4,20 @@
     var nas_host = 'http://178.234.15.238:8096';
     var nas_key  = 'b4659bb0cc0c476bb7bf3113fef553f9';
 
-    function searchInJellyfin(movie, callback) {
-        // Берем оригинальное название или русское
-        var title = movie.name || movie.title;
-        
-        // Оставляем только буквы и цифры, убираем знаки препинания
-        var cleanTitle = title.replace(/[^a-zA-Zа-яА-Я0-9\s]/g, ''); 
-
-        // Самый простой запрос: просто ищем строку по всему серверу
-        // Добавил Fields=Path, чтобы убедиться, что файл физически есть
+    function getAllItems(callback) {
+        // Запрос вообще без поиска. Просто "дай мне 20 последних видео"
         var url = nas_host + '/Items?api_key=' + nas_key + 
-                  '&searchTerm=' + encodeURIComponent(cleanTitle) + 
-                  '&Recursive=true&IncludeItemTypes=Movie,Episode,Video&Limit=20';
+                  '&Recursive=true&IncludeItemTypes=Movie,Episode,Video&Limit=20&SortBy=DateCreated&SortOrder=Descending';
 
         $.ajax({
             url: url,
             method: 'GET',
             timeout: 10000,
             success: function (data) {
-                console.log('Jellyfin found:', data);
                 callback(data.Items || []);
             },
-            error: function () {
-                Lampa.Noty.show('Jellyfin: Ошибка запроса');
+            error: function (xhr) {
+                Lampa.Noty.show('Ошибка связи: ' + xhr.status);
                 callback([]);
             }
         });
@@ -34,14 +25,13 @@
 
     function showItems(items) {
         var scroll = new Lampa.Scroll({mask: true, over: true});
-        var files = new Lampa.Explorer({title: 'Jellyfin NAS'});
+        var files = new Lampa.Explorer({title: 'Jellyfin: Последние'});
         
         items.forEach(function (item) {
-            // Создаем карточку вручную
-            var card = $('<div class="explorer-file selector"><div class="explorer-file__name">' + item.Name + '</div><div class="explorer-file__info">' + (item.ProductionYear || 'Видео') + '</div></div>');
+            var card = $('<div class="explorer-file selector"><div class="explorer-file__name">' + item.Name + '</div><div class="explorer-file__info">Тип: ' + (item.Type || 'Video') + '</div></div>');
 
             card.on('hover:enter', function () {
-                // Прямая ссылка на стрим
+                // Пробуем запустить
                 var vUrl = nas_host + '/Videos/' + item.Id + '/stream.mp4?api_key=' + nas_key + '&static=true';
                 Lampa.Player.play({ url: vUrl, title: item.Name });
                 Lampa.Player.playlist([{ url: vUrl, title: item.Name }]);
@@ -51,7 +41,7 @@
 
         files.appendFiles(scroll.render());
         Lampa.Activity.push({
-            url: '', title: 'Результаты: ' + items.length, component: 'jelly_search',
+            url: '', title: 'Найдено: ' + items.length, component: 'jelly_all',
             render: function () { return files.render(); }
         });
     }
@@ -59,13 +49,13 @@
     function startPlugin() {
         Lampa.Listener.follow('full', function (e) {
             if (e.type == 'complite') {
-                var btn = $('<div class="full-start__button selector view--online"><span>Jellyfin NAS</span></div>');
+                var btn = $('<div class="full-start__button selector view--online"><span>Jellyfin ТЕСТ</span></div>');
                 
                 btn.on('hover:enter', function () {
-                    Lampa.Noty.show('Ищу файлы...');
-                    searchInJellyfin(e.data.movie, function(found) {
-                        if (found && found.length > 0) showItems(found);
-                        else Lampa.Noty.show('Ничего не найдено по названию');
+                    Lampa.Noty.show('Запрашиваю список...');
+                    getAllItems(function(found) {
+                        if (found.length > 0) showItems(found);
+                        else Lampa.Noty.show('Сервер вернул пустой список');
                     });
                 });
 
