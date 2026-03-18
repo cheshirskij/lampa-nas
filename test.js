@@ -5,7 +5,6 @@
     var nas_key  = 'b4659bb0cc0c476bb7bf3113fef553f9';
 
     function getAllItems(callback) {
-        // Запрос вообще без поиска. Просто "дай мне 20 последних видео"
         var url = nas_host + '/Items?api_key=' + nas_key + 
                   '&Recursive=true&IncludeItemTypes=Movie,Episode,Video&Limit=20&SortBy=DateCreated&SortOrder=Descending';
 
@@ -16,33 +15,53 @@
             success: function (data) {
                 callback(data.Items || []);
             },
-            error: function (xhr) {
-                Lampa.Noty.show('Ошибка связи: ' + xhr.status);
+            error: function () {
+                Lampa.Noty.show('Ошибка загрузки данных');
                 callback([]);
             }
         });
     }
 
     function showItems(items) {
+        // Очищаем текущую активность и готовим список
         var scroll = new Lampa.Scroll({mask: true, over: true});
-        var files = new Lampa.Explorer({title: 'Jellyfin: Последние'});
         
         items.forEach(function (item) {
-            var card = $('<div class="explorer-file selector"><div class="explorer-file__name">' + item.Name + '</div><div class="explorer-file__info">Тип: ' + (item.Type || 'Video') + '</div></div>');
+            // Создаем элемент через стандартный шаблонизатор Lampa
+            var card = Lampa.Template.get('folder', {
+                title: item.Name,
+                quality: item.Type == 'Episode' ? 'Серия' : 'Фильм'
+            });
 
             card.on('hover:enter', function () {
-                // Пробуем запустить
                 var vUrl = nas_host + '/Videos/' + item.Id + '/stream.mp4?api_key=' + nas_key + '&static=true';
-                Lampa.Player.play({ url: vUrl, title: item.Name });
-                Lampa.Player.playlist([{ url: vUrl, title: item.Name }]);
+                
+                // Запуск плеера
+                Lampa.Player.play({
+                    url: vUrl,
+                    title: item.Name
+                });
+                
+                Lampa.Player.playlist([{
+                    url: vUrl,
+                    title: item.Name
+                }]);
             });
+
             scroll.append(card);
         });
 
-        files.appendFiles(scroll.render());
+        // Вызываем стандартный компонент просмотра
         Lampa.Activity.push({
-            url: '', title: 'Найдено: ' + items.length, component: 'jelly_all',
-            render: function () { return files.render(); }
+            url: '',
+            title: 'Найдено: ' + items.length,
+            component: 'jelly_all',
+            render: function () {
+                return scroll.render();
+            },
+            onBack: function(){
+                Lampa.Activity.backward();
+            }
         });
     }
 
@@ -52,10 +71,10 @@
                 var btn = $('<div class="full-start__button selector view--online"><span>Jellyfin ТЕСТ</span></div>');
                 
                 btn.on('hover:enter', function () {
-                    Lampa.Noty.show('Запрашиваю список...');
+                    Lampa.Noty.show('Загрузка 14 файлов...');
                     getAllItems(function(found) {
                         if (found.length > 0) showItems(found);
-                        else Lampa.Noty.show('Сервер вернул пустой список');
+                        else Lampa.Noty.show('Список пуст');
                     });
                 });
 
