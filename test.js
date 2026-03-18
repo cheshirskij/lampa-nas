@@ -1,22 +1,14 @@
 (function () {
     'use strict';
 
-    // ТВОИ НАСТРОЙКИ
     var nas_host = 'http://192.168.1.95:8096';
     var nas_key  = 'B4659bb0cc0c476bb7bf3113fef553f9';
 
-    // ОБНОВЛЕННАЯ ЛОГИКА ПОИСКА
     function searchInJellyfin(movie, callback) {
         var title = movie.title || movie.name;
-        // Собираем все ID, которые знает Лампа (IMDb, TMDB)
-        var ids = [];
-        if (movie.imdb_id) ids.push(movie.imdb_id);
-        if (movie.tmdb_id) ids.push(movie.tmdb_id);
-        
-        // 1. Сначала ищем по жесткому совпадению ID (самый точный способ)
-        // Параметр AnyId заставляет Jellyfin искать по всем внешним базам
-        var url = nas_host + '/Items?api_key=' + nas_key + 
-                  '&Recursive=true&Fields=PrimaryImageAspectRatio&AnyId=' + ids.join(',');
+        // Пробуем найти по ID, если их нет - по названию
+        var extId = movie.imdb_id || movie.tmdb_id || "";
+        var url = nas_host + '/Items?api_key=' + nas_key + '&Recursive=true&Fields=PrimaryImageAspectRatio&AnyId=' + extId;
 
         $.ajax({
             url: url,
@@ -24,31 +16,25 @@
             timeout: 5000,
             success: function (data) {
                 if (data && data.Items && data.Items.length > 0) {
-                    // Нашли по ID!
                     callback(data.Items);
                 } else {
-                    // 2. Если по ID не нашли, ищем по названию (запасной вариант)
-                    var searchUrl = nas_host + '/Items?api_key=' + nas_key + 
-                                    '&searchTerm=' + encodeURIComponent(title) + 
-                                    '&IncludeItemTypes=Movie,Episode&Recursive=true&Limit=10';
+                    // Запасной поиск по названию
+                    var sUrl = nas_host + '/Items?api_key=' + nas_key + '&searchTerm=' + encodeURIComponent(title) + '&IncludeItemTypes=Movie&Recursive=true';
                     $.ajax({
-                        url: searchUrl,
+                        url: sUrl,
                         method: 'GET',
-                        success: function (res) { 
-                            callback(res.Items || []); 
-                        },
+                        success: function (res) { callback(res.Items || []); },
                         error: function () { callback([]); }
                     });
                 }
             },
             error: function () {
-                Lampa.Noty.show('Ошибка связи с Proxmox');
+                Lampa.Noty.show('Ошибка связи с Jellyfin');
                 callback([]);
             }
         });
     }
 
-    // ТВОЯ ОРИГИНАЛЬНАЯ ЛОГИКА ОТРИСОВКИ
     function showItems(items) {
         var scroll = new Lampa.Scroll({mask: true, over: true});
         var files = new Lampa.Explorer({title: 'Результаты из Jellyfin'});
@@ -61,15 +47,8 @@
 
             card.on('hover:enter', function () {
                 var videoUrl = nas_host + '/Videos/' + item.Id + '/stream.mp4?api_key=' + nas_key + '&static=true';
-                
-                Lampa.Player.play({
-                    url: videoUrl,
-                    title: item.Name
-                });
-                Lampa.Player.playlist([{
-                    url: videoUrl,
-                    title: item.Name
-                }]);
+                Lampa.Player.play({ url: videoUrl, title: item.Name });
+                Lampa.Player.playlist([{ url: videoUrl, title: item.Name }]);
             });
 
             scroll.append(card);
@@ -78,3 +57,32 @@
         files.appendFiles(scroll.render());
         Lampa.Activity.push({
             url: '',
+            title: 'Jellyfin NAS',
+            component: 'jelly_search',
+            render: function () { return files.render(); }
+        });
+    }
+
+    function startPlugin() {
+        Lampa.Listener.follow('full', function (e) {
+            if (e.type == 'complite') {
+                var btn = $('<div class="full-start__button selector view--online"><span>Jellyfin NAS</span></div>');
+                
+                btn.on('hover:enter', function () {
+                    Lampa.Noty.show('Ищу на сервере...');
+                    searchInJellyfin(e.data.movie, function(foundItems) {
+                        if (foundItems.length > 0) showItems(foundItems);
+                        else Lampa.Noty.show('На сервере ничего не найдено');
+                    });
+                });
+
+                var container = e.object.activity.render().find('.view--torrent');
+                if (container.length) container.after(btn);
+                else e.object.activity.render().find('.full-start__buttons').append(btn);
+            }
+        });
+    }
+
+    if (window.appready) startPlugin();
+    else Lampa.Listener.follow('app', function (e) { if (e.type == 'ready') startPlugin(); });
+})();
