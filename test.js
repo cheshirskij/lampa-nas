@@ -4,63 +4,23 @@
     var nas_host = 'http://178.234.15.238:8096';
     var nas_key  = 'b4659bb0cc0c476bb7bf3113fef553f9';
 
-    // Регистрируем компонент для отображения списка, как в online_mod
-    Lampa.Component.add('jellyfin_view', function (object, str) {
-        var network = new Lampa.Reguest();
-        var scroll = new Lampa.Scroll({mask: true, over: true});
-        var items = [];
-        var html = $('<div></div>');
-
-        this.create = function () {
-            var _this = this;
-            
-            // Если данные переданы при открытии
-            if (object.items) {
-                object.items.forEach(function (item) {
-                    // Используем универсальный шаблон 'full_start_button' для строк
-                    var card = Lampa.Template.get('button', {
-                        title: item.Name,
-                        description: item.ProductionYear || 'Video'
-                    });
-
-                    card.on('hover:enter', function () {
-                        var vUrl = nas_host + '/Videos/' + item.Id + '/stream.mp4?api_key=' + nas_key + '&static=true';
-                        Lampa.Player.play({
-                            url: vUrl,
-                            title: item.Name
-                        });
-                        Lampa.Player.playlist([{
-                            url: vUrl,
-                            title: item.Name
-                        }]);
-                    });
-
-                    scroll.append(card);
-                });
-            }
-
-            html.append(scroll.render());
-        };
-
-        this.render = function () {
-            return html;
-        };
-    });
-
     function searchInJellyfin(movie, callback) {
         var title = movie.title || movie.name;
+        var cleanTitle = title.replace(/[^a-zA-Zа-яА-Я0-9\s]/g, ''); 
+
         var url = nas_host + '/Items?api_key=' + nas_key + 
-                  '&searchTerm=' + encodeURIComponent(title) + 
-                  '&Recursive=true&IncludeItemTypes=Movie,Episode&Limit=15';
+                  '&searchTerm=' + encodeURIComponent(cleanTitle) + 
+                  '&Recursive=true&IncludeItemTypes=Movie,Episode,Video&Limit=10';
 
         $.ajax({
             url: url,
             method: 'GET',
+            timeout: 10000,
             success: function (data) {
                 callback(data.Items || []);
             },
             error: function () {
-                Lampa.Noty.show('Jellyfin: Ошибка сети');
+                Lampa.Noty.show('Jellyfin: Ошибка сервера');
                 callback([]);
             }
         });
@@ -70,28 +30,46 @@
         Lampa.Listener.follow('full', function (e) {
             if (e.type == 'complite') {
                 var btn = $('<div class="full-start__button selector view--online"><span>Jellyfin NAS</span></div>');
+                var container = e.object.activity.render().find('.view--torrent');
+                
+                // Создаем скрытый блок для списка файлов
+                var list_html = $('<div class="jellyfin-list" style="display: none; width: 100%; margin-top: 10px;"></div>');
 
                 btn.on('hover:enter', function () {
-                    Lampa.Noty.show('Поиск на сервере...');
-                    searchInJellyfin(e.data.movie, function(found) {
-                        if (found.length > 0) {
-                            // Вызываем наш зарегистрированный компонент
-                            Lampa.Activity.push({
-                                url: '',
-                                title: 'Jellyfin',
-                                component: 'jellyfin_view',
-                                items: found, // Передаем найденные файлы
-                                page: 1
-                            });
-                        } else {
-                            Lampa.Noty.show('На NAS ничего не найдено');
-                        }
-                    });
+                    if (list_html.is(':visible')) {
+                        list_html.slideUp(200);
+                    } else {
+                        Lampa.Noty.show('Ищу файлы на NAS...');
+                        searchInJellyfin(e.data.movie, function(found) {
+                            if (found.length > 0) {
+                                list_html.empty().show();
+                                found.forEach(function(item) {
+                                    var line = $('<div class="full-start__button selector" style="display: block; width: 100%; text-align: left; margin-bottom: 5px; background: rgba(255,255,255,0.1);"><span>' + item.Name + '</span></div>');
+                                    
+                                    line.on('hover:enter', function() {
+                                        var vUrl = nas_host + '/Videos/' + item.Id + '/stream.mp4?api_key=' + nas_key + '&static=true';
+                                        Lampa.Player.play({
+                                            url: vUrl,
+                                            title: item.Name
+                                        });
+                                        Lampa.Player.playlist([{url: vUrl, title: item.Name}]);
+                                    });
+                                    
+                                    list_html.append(line);
+                                });
+                                // Заставляем Lampa обновить фокус на новых кнопках
+                                e.object.activity.render().find('.selector').unbind('mouseenter'); 
+                            } else {
+                                Lampa.Noty.show('На сервере пусто');
+                            }
+                        });
+                    }
                 });
 
-                var container = e.object.activity.render().find('.view--torrent');
-                if (container.length) container.after(btn);
-                else e.object.activity.render().find('.full-start__buttons').append(btn);
+                if (container.length) {
+                    container.after(btn);
+                    btn.after(list_html);
+                }
             }
         });
     }
