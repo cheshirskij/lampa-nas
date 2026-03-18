@@ -4,19 +4,18 @@
     var nas_host = 'http://178.234.15.238:8096';
     var nas_key  = 'b4659bb0cc0c476bb7bf3113fef553f9';
 
-    // 1. Создаем компонент отображения, как в примере
+    // Регистрируем компонент отображения
     Lampa.Component.add('jellyfin_search', function (object, str) {
         var scroll = new Lampa.Scroll({mask: true, over: true});
-        var html = $('<div></div>');
+        var html = $('<div class="category-full"></div>');
         
         this.create = function () {
             var _this = this;
             if (object.items && object.items.length) {
                 object.items.forEach(function (item) {
-                    // Используем стандартный шаблон кнопки из примера
                     var card = Lampa.Template.get('button', {
                         title: item.Name,
-                        description: item.ProductionYear || 'Jellyfin'
+                        description: (item.ProductionYear || '') + ' • ' + (item.Type === 'Episode' ? 'Серия' : 'Фильм')
                     });
 
                     card.on('hover:enter', function () {
@@ -25,49 +24,53 @@
                             url: vUrl,
                             title: item.Name
                         });
-                        Lampa.Player.playlist([{
-                            url: vUrl,
-                            title: item.Name
-                        }]);
+                        var playlist = object.items.map(function(i){
+                            return {
+                                title: i.Name,
+                                url: nas_host + '/Videos/' + i.Id + '/stream.mp4?api_key=' + nas_key + '&static=true'
+                            }
+                        });
+                        Lampa.Player.playlist(playlist);
                     });
                     scroll.append(card);
                 });
-            } else {
-                html.append('<div class="empty">Ничего не найдено</div>');
             }
             html.append(scroll.render());
         };
 
-        this.render = function () {
-            return html;
-        };
+        this.render = function () { return html; };
     });
 
-    // 2. Логика поиска через системный Lampa.Reguest
+    // Поиск как в online_mod (через системный network)
     function search(movie, callback) {
-        var network = new Lampa.Reguest();
         var title = movie.title || movie.name;
+        // Убираем всё, кроме букв и цифр, для максимально широкого поиска
+        var cleanTitle = title.replace(/[^a-zA-Zа-яА-Я0-9]/g, ' ').trim();
+        
         var url = nas_host + '/Items?api_key=' + nas_key + 
-                  '&searchTerm=' + encodeURIComponent(title) + 
-                  '&Recursive=true&IncludeItemTypes=Movie,Episode&Limit=20';
+                  '&searchTerm=' + encodeURIComponent(cleanTitle) + 
+                  '&Recursive=true&IncludeItemTypes=Movie,Episode,Video&Limit=30&Fields=Path';
 
+        var network = new Lampa.Reguest();
         network.silent(url, function (data) {
+            console.log('Jellyfin Search Result:', data); // Для отладки в консоли
             callback(data.Items || []);
         }, function () {
-            Lampa.Noty.show('Ошибка связи с Jellyfin');
+            Lampa.Noty.show('Jellyfin: Ошибка сети (проверьте CORS)');
             callback([]);
         });
     }
 
-    // 3. Добавление кнопки через правильный Listener
     function addButton(e) {
-        var btn = $('<div class="full-start__button selector view--online"><span>Jellyfin NAS</span></div>');
+        // Проверяем, не добавлена ли уже кнопка
+        if (e.object.activity.render().find('.jellyfin-nas-btn').length) return;
+
+        var btn = $('<div class="full-start__button selector view--online jellyfin-nas-btn"><span>Jellyfin NAS</span></div>');
         
         btn.on('hover:enter', function () {
-            Lampa.Noty.show('Поиск...');
+            Lampa.Noty.show('Ищу: ' + (e.data.movie.title || e.data.movie.name));
             search(e.data.movie, function (found) {
                 if (found.length > 0) {
-                    // Пушим активность с нашим компонентом
                     Lampa.Activity.push({
                         url: '',
                         title: 'Jellyfin',
@@ -81,13 +84,11 @@
             });
         });
 
-        // Вставка кнопки по логике примера
         var container = e.object.activity.render().find('.view--torrent');
         if (container.length) container.after(btn);
         else e.object.activity.render().find('.full-start__buttons').append(btn);
     }
 
-    // Запуск плагина
     function startPlugin() {
         Lampa.Listener.follow('full', function (e) {
             if (e.type == 'complite') {
