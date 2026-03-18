@@ -27,6 +27,7 @@
                     
                     getAllContent(function (items) {
                         if (items.length > 0) {
+                            // Вместо нового окна открываем системное меню выбора
                             Lampa.Select.show({
                                 title: 'Файлы на сервере',
                                 items: items.map(function(i){
@@ -37,32 +38,17 @@
                                     }
                                 }),
                                 onSelect: function (selected) {
-                                    var item = selected.data;
-                                    var vUrl = nas_host + '/Videos/' + item.Id + '/stream.mp4?api_key=' + nas_key + '&static=true';
+                                    var vUrl = nas_host + '/Videos/' + selected.data.Id + '/stream.mp4?api_key=' + nas_key + '&static=true';
                                     
-                                    // Формируем массив субтитров "вслепую" для первой дорожки
-                                    // Jellyfin обычно отдает поток 0 как видео, 1 как аудио, а дальше субтитры
-                                    var subs = [
-                                        {
-                                            label: 'Внешние/Вшитые',
-                                            url: nas_host + '/Videos/' + item.Id + '/Subtitles/2/0/Stream.vtt?api_key=' + nas_key,
-                                            type: 'vtt'
-                                        },
-                                        {
-                                            label: 'Дорожка 2',
-                                            url: nas_host + '/Videos/' + item.Id + '/Subtitles/3/0/Stream.vtt?api_key=' + nas_key,
-                                            type: 'vtt'
-                                        }
-                                    ];
-
-                                    var videoData = {
+                                    Lampa.Player.play({
                                         url: vUrl,
-                                        title: item.Name,
-                                        subtitles: subs // Просто передаем их списком
-                                    };
+                                        title: selected.data.Name
+                                    });
                                     
-                                    Lampa.Player.play(videoData);
-                                    Lampa.Player.playlist([videoData]);
+                                    Lampa.Player.playlist([{
+                                        title: selected.data.Name,
+                                        url: vUrl
+                                    }]);
                                 },
                                 onBack: function () {
                                     Lampa.Controller.toggle('full_start');
