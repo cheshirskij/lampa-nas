@@ -1,35 +1,50 @@
 (function () {
     'use strict';
 
-    // Твои новые настройки
+    // Твои настройки
     var nas_host = 'http://178.234.15.238:8096';
     var nas_key  = 'b4659bb0cc0c476bb7bf3113fef553f9';
 
+    // Умный поиск: AnyId -> SearchTerm
     function searchInJellyfin(movie, callback) {
         var title = movie.title || movie.name;
-        var extId = movie.imdb_id || movie.tmdb_id || "";
+        // Самый агрессивный фильтр названия: оставляем только буквы, цифры и пробелы
+        var cleanTitle = title.replace(/[^a-zA-Zа-яА-Я0-9\s]/g, ''); 
+        var imdbId = movie.imdb_id;
         
-        var url = nas_host + '/Items?api_key=' + nas_key + '&Recursive=true&Fields=PrimaryImageAspectRatio&AnyId=' + extId;
+        // Очищаем IMDb ID от 'tt', если он есть
+        if (imdbId) imdbId = imdbId.replace(/^tt/, '');
+        var anyId = imdbId;
+        
+        // 1. Попытка 1: Поиск по AnyId (чистый IMDb)
+        var urlAnyId = nas_host + '/Items?api_key=' + nas_key + '&Recursive=true&Fields=PrimaryImageAspectRatio&AnyId=' + anyId;
 
         $.ajax({
-            url: url,
+            url: urlAnyId,
             method: 'GET',
-            timeout: 8000,
+            timeout: 8000, 
             success: function (data) {
                 if (data && data.Items && data.Items.length > 0) {
                     callback(data.Items);
                 } else {
-                    var sUrl = nas_host + '/Items?api_key=' + nas_key + '&searchTerm=' + encodeURIComponent(title) + '&IncludeItemTypes=Movie,Episode&Recursive=true&Limit=10';
+                    // 2. Если по ID не нашли, ищем по очищенному названию
+                    var sUrl = nas_host + '/Items?api_key=' + nas_key + '&searchTerm=' + encodeURIComponent(cleanTitle) + '&IncludeItemTypes=Movie,Episode&Recursive=true&Limit=10';
+                    
                     $.ajax({
                         url: sUrl,
                         method: 'GET',
-                        success: function (res) { callback(res.Items || []); },
-                        error: function () { callback([]); }
+                        success: function (res) { 
+                            callback(res.Items || []); 
+                        },
+                        error: function (xhr) { 
+                            callback([]); 
+                        }
                     });
                 }
             },
             error: function (xhr) {
-                if(xhr.status === 401) Lampa.Noty.show('Jellyfin: Ошибка ключа (401)');
+                if(xhr.status === 401) Lampa.Noty.show('Jellyfin: Ошибка авторизации (401)');
+                else if(xhr.status === 0) Lampa.Noty.show('Jellyfin: Блокировка CORS в браузере');
                 else Lampa.Noty.show('Jellyfin: Сервер недоступен');
                 callback([]);
             }
@@ -62,7 +77,7 @@
     function startPlugin() {
         Lampa.Listener.follow('full', function (e) {
             if (e.type == 'complite') {
-                // Твоя оригинальная кнопка с классом view--online
+                // Кнопка с классом view--online в стиле Лампы
                 var btn = $('<div class="full-start__button selector view--online"><span>Jellyfin NAS</span></div>');
                 
                 btn.on('hover:enter', function () {
@@ -73,7 +88,7 @@
                     });
                 });
 
-                // Твой оригинальный метод вставки (после Торрентов)
+                // Вставка после Торрентов
                 var container = e.object.activity.render().find('.view--torrent');
                 if (container.length) container.after(btn);
                 else e.object.activity.render().find('.full-start__buttons').append(btn);
