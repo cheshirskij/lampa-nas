@@ -6,8 +6,9 @@
 
     function getAllContent(callback) {
         var network = new Lampa.Reguest();
+        // Добавляем ТОЛЬКО MediaSources, это даст нам индексы субтитров
         var url = nas_host + '/Items?api_key=' + nas_key + 
-                  '&Recursive=true&IncludeItemTypes=Movie,Episode,Video&Limit=50&SortBy=DateCreated&SortOrder=Descending';
+                  '&Recursive=true&IncludeItemTypes=Movie,Episode,Video&Limit=50&SortBy=DateCreated&SortOrder=Descending&Fields=MediaSources';
 
         network.silent(url, function (data) {
             callback(data.Items || []);
@@ -27,7 +28,6 @@
                     
                     getAllContent(function (items) {
                         if (items.length > 0) {
-                            // Вместо нового окна открываем системное меню выбора
                             Lampa.Select.show({
                                 title: 'Файлы на сервере',
                                 items: items.map(function(i){
@@ -38,17 +38,33 @@
                                     }
                                 }),
                                 onSelect: function (selected) {
-                                    var vUrl = nas_host + '/Videos/' + selected.data.Id + '/stream.mp4?api_key=' + nas_key + '&static=true';
+                                    var item = selected.data;
+                                    var vUrl = nas_host + '/Videos/' + item.Id + '/stream.mp4?api_key=' + nas_key + '&static=true';
                                     
-                                    Lampa.Player.play({
+                                    var subs = [];
+                                    // Если сервер прислал данные о потоках, вытаскиваем их
+                                    if (item.MediaSources && item.MediaSources[0] && item.MediaSources[0].MediaStreams) {
+                                        item.MediaSources[0].MediaStreams.forEach(function(stream) {
+                                            if (stream.Type === 'Subtitle') {
+                                                subs.push({
+                                                    label: stream.DisplayTitle || stream.Language || 'Субтитры',
+                                                    // Ссылка на VTT для совместимости с Lampa
+                                                    url: nas_host + '/Videos/' + item.Id + '/Subtitles/' + stream.Index + '/0/Stream.vtt?api_key=' + nas_key,
+                                                    type: 'vtt'
+                                                });
+                                            }
+                                        });
+                                    }
+
+                                    var videoData = {
                                         url: vUrl,
-                                        title: selected.data.Name
-                                    });
+                                        title: item.Name,
+                                        subtitles: subs
+                                    };
                                     
-                                    Lampa.Player.playlist([{
-                                        title: selected.data.Name,
-                                        url: vUrl
-                                    }]);
+                                    // Мгновенный запуск
+                                    Lampa.Player.play(videoData);
+                                    Lampa.Player.playlist([videoData]);
                                 },
                                 onBack: function () {
                                     Lampa.Controller.toggle('full_start');
