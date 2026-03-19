@@ -18,7 +18,6 @@
     }
 
     function startPlugin() {
-        // Создаем кнопку для меню
         var menu_item = $(`
             <li class="menu__item selector" data-action="local_files">
                 <div class="menu__ico">
@@ -30,14 +29,15 @@
             </li>
         `);
 
-        // Обработчик нажатия
         menu_item.on('hover:enter', function () {
-            Lampa.Menu.hide(); // Прячем боковую панель
+            // Сохраняем состояние контроллера, чтобы не было Script Error
+            Lampa.Controller.save();
+            Lampa.Menu.hide();
             
             Lampa.Noty.show('Загрузка списка...');
             
             getAllContent(function (items) {
-                if (items && items.length > 0) {
+                if (items.length > 0) {
                     Lampa.Select.show({
                         title: 'Локальные файлы',
                         items: items.map(function(i){
@@ -78,24 +78,20 @@
                         }
                     });
                 } else {
-                    Lampa.Noty.show('Файлы не найдены или сервер недоступен');
+                    Lampa.Noty.show('Файлы не найдены');
                 }
             });
         });
 
-        // Вставляем строго под "Главная"
-        var timer = setInterval(function(){
-            var main = $('.menu .menu__list li[data-action="main"]');
-            if(main.length){
-                clearInterval(timer);
-                if(!$('.menu .menu__list li[data-action="local_files"]').length){
-                    menu_item.insertAfter(main);
-                }
-            }
-        }, 100);
+        // Вставка под "Главная"
+        var main_item = $('.menu .menu__list li[data-action="main"]');
+        if (main_item.length) {
+            menu_item.insertAfter(main_item);
+        } else {
+            $('.menu .menu__list').prepend(menu_item);
+        }
     }
 
-    // Запуск плагина
     if (window.appready) startPlugin();
     else Lampa.Listener.follow('app', function (e) { if (e.type == 'ready') startPlugin(); });
 
