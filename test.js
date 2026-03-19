@@ -4,7 +4,6 @@
     var nas_host = 'http://178.234.15.238:8096';
     var nas_key  = 'b4659bb0cc0c476bb7bf3113fef553f9';
 
-    // Твоя оригинальная функция получения контента
     function getAllContent(callback) {
         var network = new Lampa.Reguest();
         var url = nas_host + '/Items?api_key=' + nas_key + 
@@ -18,9 +17,7 @@
         });
     }
 
-    // Функция отрисовки в боковом меню
     function startPlugin() {
-        // Создаем элемент списка для меню
         var menu_item = $(`
             <li class="menu__item selector" data-action="local_files">
                 <div class="menu__ico">
@@ -32,65 +29,71 @@
             </li>
         `);
 
-        // Логика нажатия (твоя оригинальная)
         menu_item.on('hover:enter', function () {
-            Lampa.Noty.show('Загрузка списка...');
-            
-            getAllContent(function (items) {
-                if (items.length > 0) {
-                    Lampa.Select.show({
-                        title: 'Локальные файлы',
-                        items: items.map(function(i){
-                            return {
-                                title: i.Name,
-                                subtitle: i.ProductionYear || '',
-                                data: i
-                            }
-                        }),
-                        onSelect: function (selected) {
-                            var item = selected.data;
-                            var vUrl = nas_host + '/Videos/' + item.Id + '/stream.mp4?api_key=' + nas_key + '&static=true';
-                            
-                            var subs = [];
-                            if (item.MediaSources && item.MediaSources[0] && item.MediaSources[0].MediaStreams) {
-                                item.MediaSources[0].MediaStreams.forEach(function(stream) {
-                                    if (stream.Type === 'Subtitle') {
-                                        subs.push({
-                                            label: stream.DisplayTitle || stream.Language || 'Субтитры',
-                                            url: nas_host + '/Videos/' + item.Id + '/Subtitles/' + stream.Index + '/0/Stream.vtt?api_key=' + nas_key,
-                                            type: 'vtt'
+            // Сначала прячем меню
+            Lampa.Menu.hide();
+
+            // Небольшая задержка, чтобы избежать "Script Error" при переключении контроллеров
+            setTimeout(function() {
+                try {
+                    Lampa.Noty.show('Загрузка списка...');
+                    
+                    getAllContent(function (items) {
+                        if (items.length > 0) {
+                            Lampa.Select.show({
+                                title: 'Локальные файлы',
+                                items: items.map(function(i){
+                                    return {
+                                        title: i.Name,
+                                        subtitle: i.ProductionYear || '',
+                                        data: i
+                                    }
+                                }),
+                                onSelect: function (selected) {
+                                    var item = selected.data;
+                                    var vUrl = nas_host + '/Videos/' + item.Id + '/stream.mp4?api_key=' + nas_key + '&static=true';
+                                    
+                                    var subs = [];
+                                    if (item.MediaSources && item.MediaSources[0] && item.MediaSources[0].MediaStreams) {
+                                        item.MediaSources[0].MediaStreams.forEach(function(stream) {
+                                            if (stream.Type === 'Subtitle') {
+                                                subs.push({
+                                                    label: stream.DisplayTitle || stream.Language || 'Субтитры',
+                                                    url: nas_host + '/Videos/' + item.Id + '/Subtitles/' + stream.Index + '/0/Stream.vtt?api_key=' + nas_key,
+                                                    type: 'vtt'
+                                                });
+                                            }
                                         });
                                     }
-                                });
-                            }
 
-                            var videoData = {
-                                url: vUrl,
-                                title: item.Name,
-                                subtitles: subs
-                            };
-                            
-                            Lampa.Player.play(videoData);
-                            Lampa.Player.playlist([videoData]);
-                        },
-                        onBack: function () {
-                            Lampa.Controller.toggle('menu'); 
+                                    var videoData = {
+                                        url: vUrl,
+                                        title: item.Name,
+                                        subtitles: subs
+                                    };
+                                    
+                                    Lampa.Player.play(videoData);
+                                    Lampa.Player.playlist([videoData]);
+                                },
+                                onBack: function () {
+                                    Lampa.Controller.toggle('menu'); 
+                                }
+                            });
+                        } else {
+                            Lampa.Noty.show('Файлы не найдены');
                         }
                     });
-                } else {
-                    Lampa.Noty.show('Файлы не найдены');
+                } catch (e) {
+                    console.log('Jellyfin plugin error:', e);
                 }
-            });
-            
-            Lampa.Menu.hide(); 
+            }, 10);
         });
 
-        // Вставляем сразу ПОСЛЕ пункта "Главная"
         var main_item = $('.menu .menu__list li[data-action="main"]');
         if (main_item.length) {
             menu_item.insertAfter(main_item);
         } else {
-            $('.menu .menu__list').prepend(menu_item); // Если вдруг не нашли "Главную", ставим в самый верх
+            $('.menu .menu__list').prepend(menu_item);
         }
     }
 
