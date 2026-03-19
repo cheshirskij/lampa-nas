@@ -1,12 +1,22 @@
 (function () {
     'use strict';
 
+    // Конфигурация Jellyfin
     var nas_host = 'http://178.234.15.238:8096';
     var nas_key  = 'b4659bb0cc0c476bb7bf3113fef553f9';
 
+    // Добавляем перевод названия
+    Lampa.Lang.add({
+        local_files_title: {
+            ru: "Локальные файлы",
+            en: "Local Files",
+            uk: "Локальні файли"
+        }
+    });
+
+    // Функция получения контента
     function getAllContent(callback) {
         var network = new Lampa.Reguest();
-        // Добавляем ТОЛЬКО MediaSources, это даст нам индексы субтитров
         var url = nas_host + '/Items?api_key=' + nas_key + 
                   '&Recursive=true&IncludeItemTypes=Movie,Episode,Video&Limit=50&SortBy=DateCreated&SortOrder=Descending&Fields=MediaSources';
 
@@ -18,71 +28,91 @@
         });
     }
 
-    function startPlugin() {
-        Lampa.Listener.follow('full', function (e) {
-            if (e.type == 'complite') {
-                var btn = $('<div class="full-start__button selector view--online"><span>Jellyfin NAS</span></div>');
+    // Функция отрисовки кнопки в настройках
+    function addLocalFilesButton() {
+        if (Lampa.Settings.main && !Lampa.Settings.main().render().find('[data-component="local_jellyfin"]').length) {
+            // HTML разметка кнопки с иконкой Jellyfin
+            var field = $(`
+                <div class="settings-param selector" data-component="local_jellyfin">
+                    <div class="settings-param__icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14.5v-9l6 4.5-6 4.5z" fill="currentColor"/>
+                        </svg>
+                    </div>
+                    <div class="settings-param__name">${Lampa.Lang.translate('local_files_title')}</div>
+                    <div class="settings-param__value">Jellyfin NAS</div>
+                </div>
+            `);
 
-                btn.on('hover:enter', function () {
-                    Lampa.Noty.show('Загрузка списка...');
-                    
-                    getAllContent(function (items) {
-                        if (items.length > 0) {
-                            Lampa.Select.show({
-                                title: 'Файлы на сервере',
-                                items: items.map(function(i){
-                                    return {
-                                        title: i.Name,
-                                        subtitle: i.ProductionYear || '',
-                                        data: i
-                                    }
-                                }),
-                                onSelect: function (selected) {
-                                    var item = selected.data;
-                                    var vUrl = nas_host + '/Videos/' + item.Id + '/stream.mp4?api_key=' + nas_key + '&static=true';
-                                    
-                                    var subs = [];
-                                    // Если сервер прислал данные о потоках, вытаскиваем их
-                                    if (item.MediaSources && item.MediaSources[0] && item.MediaSources[0].MediaStreams) {
-                                        item.MediaSources[0].MediaStreams.forEach(function(stream) {
-                                            if (stream.Type === 'Subtitle') {
-                                                subs.push({
-                                                    label: stream.DisplayTitle || stream.Language || 'Субтитры',
-                                                    // Ссылка на VTT для совместимости с Lampa
-                                                    url: nas_host + '/Videos/' + item.Id + '/Subtitles/' + stream.Index + '/0/Stream.vtt?api_key=' + nas_key,
-                                                    type: 'vtt'
-                                                });
-                                            }
-                                        });
-                                    }
+            // Вставляем после компонента "more" (или выбери другой, например "interface")
+            Lampa.Settings.main().render().find('[data-component="more"]').after(field);
+            Lampa.Settings.main().update();
+        }
+    }
 
-                                    var videoData = {
-                                        url: vUrl,
-                                        title: item.Name,
-                                        subtitles: subs
-                                    };
-                                    
-                                    // Мгновенный запуск
-                                    Lampa.Player.play(videoData);
-                                    Lampa.Player.playlist([videoData]);
-                                },
-                                onBack: function () {
-                                    Lampa.Controller.toggle('full_start');
+    // Обработчик клика
+    function handleAction() {
+        Lampa.Noty.show('Загрузка списка...');
+        
+        getAllContent(function (items) {
+            if (items.length > 0) {
+                Lampa.Select.show({
+                    title: 'Файлы на сервере',
+                    items: items.map(function(i){
+                        return {
+                            title: i.Name,
+                            subtitle: i.ProductionYear || '',
+                            data: i
+                        }
+                    }),
+                    onSelect: function (selected) {
+                        var item = selected.data;
+                        var vUrl = nas_host + '/Videos/' + item.Id + '/stream.mp4?api_key=' + nas_key + '&static=true';
+                        
+                        var subs = [];
+                        if (item.MediaSources && item.MediaSources[0] && item.MediaSources[0].MediaStreams) {
+                            item.MediaSources[0].MediaStreams.forEach(function(stream) {
+                                if (stream.Type === 'Subtitle') {
+                                    subs.push({
+                                        label: stream.DisplayTitle || stream.Language || 'Субтитры',
+                                        url: nas_host + '/Videos/' + item.Id + '/Subtitles/' + stream.Index + '/0/Stream.vtt?api_key=' + nas_key,
+                                        type: 'vtt'
+                                    });
                                 }
                             });
-                        } else {
-                            Lampa.Noty.show('Файлы не найдены');
                         }
-                    });
-                });
 
-                var container = e.object.activity.render().find('.view--torrent');
-                if (container.length) container.after(btn);
-                else e.object.activity.render().find('.full-start__buttons').append(btn);
+                        var videoData = {
+                            url: vUrl,
+                            title: item.Name,
+                            subtitles: subs
+                        };
+                        
+                        Lampa.Player.play(videoData);
+                        Lampa.Player.playlist([videoData]);
+                    },
+                    onBack: function () {
+                        Lampa.Controller.toggle('settings');
+                    }
+                });
+            } else {
+                Lampa.Noty.show('Файлы не найдены');
             }
         });
     }
 
-    if (window.appready) startPlugin();
-    else Lampa.Listener.follow('app', function (e) { if (e.type == 'ready') startPlugin(); });
+    // Слушатель открытия настроек
+    Lampa.Settings.listener.follow('open', function(e) {
+        if (e.name == 'main') {
+            addLocalFilesButton();
+            e.body.find('[data-component="local_jellyfin"]').on('hover:enter', function() {
+                handleAction();
+            });
+        }
+    });
+
+    // Запуск при старте
+    if (window.appready) addLocalFilesButton();
+    else Lampa.Listener.follow('app', function (e) { if (e.type == 'ready') addLocalFilesButton(); });
+
 })();
