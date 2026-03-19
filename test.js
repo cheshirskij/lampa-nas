@@ -4,7 +4,7 @@
     var nas_host = 'http://178.234.15.238:8096';
     var nas_key  = 'b4659bb0cc0c476bb7bf3113fef553f9';
 
-    // Твоя оригинальная функция получения контента
+    // 1. Твоя родная логика запроса
     function getAllContent(callback) {
         var network = new Lampa.Reguest();
         var url = nas_host + '/Items?api_key=' + nas_key + 
@@ -18,9 +18,11 @@
         });
     }
 
-    // Функция отрисовки в боковом меню
+    // 2. Функция вставки в меню и запуска
     function startPlugin() {
-        // Создаем элемент списка для меню
+        // Проверяем, чтобы не добавить кнопку дважды
+        if ($('.menu .menu__list li[data-action="local_files"]').length) return;
+
         var menu_item = $(`
             <li class="menu__item selector" data-action="local_files">
                 <div class="menu__ico">
@@ -32,8 +34,9 @@
             </li>
         `);
 
-        // Логика нажатия (твоя оригинальная)
         menu_item.on('hover:enter', function () {
+            // Убрали Lampa.Menu.hide(), чтобы не было ошибки "is not a function"
+            
             Lampa.Noty.show('Загрузка списка...');
             
             getAllContent(function (items) {
@@ -81,20 +84,18 @@
                     Lampa.Noty.show('Файлы не найдены');
                 }
             });
-            
-            Lampa.Menu.hide(); 
         });
 
-        // Вставляем сразу ПОСЛЕ пункта "Главная"
+        // Вставляем строго под "Главная"
         var main_item = $('.menu .menu__list li[data-action="main"]');
         if (main_item.length) {
             menu_item.insertAfter(main_item);
         } else {
-            $('.menu .menu__list').prepend(menu_item); // Если вдруг не нашли "Главную", ставим в самый верх
+            $('.menu .menu__list').prepend(menu_item);
         }
     }
 
+    // Инициализация
     if (window.appready) startPlugin();
     else Lampa.Listener.follow('app', function (e) { if (e.type == 'ready') startPlugin(); });
-
 })();
