@@ -20,18 +20,14 @@
     function startPlugin() {
         if ($('.menu .menu__list li[data-action="local_files"]').length) return;
 
-        // SVG логотип Jellyfin (фирменная форма)
-        var jellyIcon = `
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2L4 7V17L12 22L20 17V7L12 2ZM11 16.5V7.5L17 12L11 16.5Z" fill="#AA5CC3"/>
-                <path opacity="0.4" d="M12 2L4 7V17L12 22V2L12 2Z" fill="#AA5CC3"/>
-            </svg>
-        `;
+        // Прямая ссылка на официальную иконку Jellyfin (PNG)
+        // Мы используем картинку, чтобы получить тот самый градиент и форму, что и на телефоне.
+        var jellyImgUrl = 'https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/branding/logo-icons/icon-transparent.png';
 
         var menu_item = $(`
             <li class="menu__item selector" data-action="local_files">
-                <div class="menu__ico">
-                    ${jellyIcon}
+                <div class="menu__ico" style="display: flex; align-items: center; justify-content: center;">
+                    <img src="${jellyImgUrl}" style="width: 22px; height: 22px; object-fit: contain;" alt="Jellyfin">
                 </div>
                 <div class="menu__text">Локальные файлы</div>
             </li>
